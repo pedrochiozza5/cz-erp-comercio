@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
-  Activity, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown,
+  ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown,
   CircleAlert, Database, Download, FileText, LayoutDashboard, Menu, Package,
   Plus, Search, Settings2, ShoppingBag, ShoppingCart, SlidersHorizontal, Store, Trash2,
-  Truck, Upload, Users, Wallet, X
+  Truck, Upload, Users, X
 } from 'lucide-react'
 import type { AppData, CartLine, Client, PaymentMethod, PriceTier, Product, PurchaseLine, Sale, Supplier, View } from './domain/types'
 import { adjustStock, balanceFor, commitPurchase, commitSale, dateShort, dateTime, money, newId, registerPayment } from './domain/operations'
 import { backupData, loadData, readBackup, saveData } from './data/localRepository'
 import { demoData } from './domain/seed'
+import Dashboard from './Dashboard'
 
 type IconComponent = typeof LayoutDashboard
 const nav: { title: string; items: { id: View; label: string; icon: IconComponent }[] }[] = [
@@ -39,9 +40,6 @@ function Pill({ children, tone = 'default' }: { children: ReactNode; tone?: 'def
 }
 function Empty({ icon: Icon, title, desc }: { icon: IconComponent; title: string; desc: string }) {
   return <div className="empty"><Icon size={30} strokeWidth={1.6}/><h3>{title}</h3><p>{desc}</p></div>
-}
-function Stat({ icon: Icon, title, value, detail, color = 'blue' }: { icon: IconComponent; title: string; value: string; detail: string; color?: 'blue'|'green'|'amber'|'purple' }) {
-  return <div className="stat"><div className={`stat-icon stat-${color}`}><Icon size={19}/></div><p>{title}</p><strong>{value}</strong><span>{detail}</span></div>
 }
 function Input({ label, value, onChange, placeholder = '', type = 'text', min, step, required = false }: { label: string; value: string | number; onChange: (v: string) => void; placeholder?: string; type?: string; min?: string; step?: string; required?: boolean }) {
   return <label className="field"><span>{label}</span><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} min={min} step={step} required={required}/></label>
@@ -91,23 +89,6 @@ export default function App() {
   </div>
 }
 type Tx = (fn: (current: AppData) => AppData, success: string) => boolean
-
-function Dashboard({ data, onNavigate }: { data: AppData; onNavigate: (v: View) => void }) {
-  const stockAlerts = data.products.filter(p => p.active && p.stock <= p.minStock)
-  const today = new Date().toDateString()
-  const salesToday = data.sales.filter(s => new Date(s.createdAt).toDateString() === today)
-  const revenue = salesToday.reduce((s, x) => s + x.total, 0)
-  const debt = data.clients.reduce((sum, c) => sum + Math.max(0, balanceFor(data, c.id)), 0)
-  const stockValue = data.products.reduce((sum, p) => sum + p.stock * p.cost, 0)
-  const top = [...data.products].sort((a,b) => b.stock * b.cost - a.stock * a.cost).slice(0,5)
-  return <>
-    <div className="hero-banner"><div><span className="hero-kicker"><Activity size={15}/> Todo en un solo lugar</span><h2>Administrá mejor.<br/>Vendé más simple.</h2><p>Una base moderna para operaciones de mostrador, mayoristas y control de mercadería.</p><button className="hero-link" onClick={() => onNavigate('products')}>Explorar catálogo <ArrowRight size={16}/></button></div><div className="hero-graphic" aria-hidden="true"><div className="hero-ring ring-one"/><div className="hero-ring ring-two"/><div className="hero-chart"><div/><div/><div/><div/><div/><div/><div/></div></div></div>
-    <div className="stats-grid"><Stat icon={Wallet} title="Ventas de hoy" value={money(revenue)} detail={`${salesToday.length} operaciones registradas`} color="blue"/><Stat icon={Package} title="Artículos activos" value={qNum(data.products.filter(p => p.active).length)} detail="Productos del catálogo" color="green"/><Stat icon={CircleAlert} title="Alertas de stock" value={qNum(stockAlerts.length)} detail="Bajo mínimo o sin existencias" color="amber"/><Stat icon={ArrowLeftRight} title="Cuentas a cobrar" value={money(debt)} detail="Saldos comerciales pendientes" color="purple"/></div>
-    <div className="two-cols dashboard-cols"><section className="panel"><div className="panel-head"><div><h2>Últimas ventas</h2><p>Operaciones más recientes</p></div><button className="text-link" onClick={() => onNavigate('sales')}>Ver todas <ArrowRight size={16}/></button></div>{data.sales.length ? <div className="recent-list">{data.sales.slice(0,5).map(s => <div className="recent-row" key={s.id}><div className="recent-icon"><ShoppingBag size={18}/></div><div className="recent-main"><strong>Venta #{String(s.number).padStart(5,'0')}</strong><span>{getName(s.clientId,data.clients)} · {dateTime(s.createdAt)}</span></div><b>{money(s.total)}</b></div>)}</div> : <Empty icon={ShoppingBag} title="Sin ventas todavía" desc="Registrá tu primera venta desde el punto de venta."/>}</section>
-      <section className="panel"><div className="panel-head"><div><h2>Stock a revisar</h2><p>Productos con bajo nivel de existencias</p></div><button className="text-link" onClick={() => onNavigate('stock')}>Inventario <ArrowRight size={16}/></button></div>{stockAlerts.length ? <div className="alert-list">{stockAlerts.slice(0,5).map(p => <div className="alert-row" key={p.id}><div><strong>{p.name}</strong><span>{p.sku}</span></div><Pill tone={p.stock <= 0 ? 'red' : 'amber'}>{qNum(p.stock)} {p.unit}</Pill></div>)}</div> : <Empty icon={Check} title="Todo en orden" desc="Los artículos están por encima de su mínimo."/>}</section></div>
-    <div className="two-cols bottom-cols"><section className="panel"><div className="panel-head"><div><h2>Valor del inventario</h2><p>Estimado según último costo cargado</p></div><span className="panel-tag">Costo de reposición ilustrativo</span></div><div className="inventory-total">{money(stockValue)}</div><p className="panel-help">No equivale al valor contable ni incluye impuestos, gastos o mermas.</p></section><section className="panel"><div className="panel-head"><div><h2>Artículos con más capital</h2><p>Stock valorizado al costo registrado</p></div></div><div className="mini-bars">{top.map(p => <div className="mini-bar-row" key={p.id}><span title={p.name}>{p.name}</span><div className="bar-bg"><div style={{ width: `${top[0].stock*top[0].cost ? Math.max(4,p.stock*p.cost/(top[0].stock*top[0].cost)*100) : 0}%` }}/></div><b>{money(p.stock*p.cost)}</b></div>)}</div></section></div>
-  </>
-}
 
 function POS({ data, transact }: { data: AppData; transact: Tx }) {
   const [query, setQuery] = useState('')
